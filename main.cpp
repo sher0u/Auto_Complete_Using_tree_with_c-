@@ -1,232 +1,216 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cctype>
 
 #define ALPHABET_SIZE 26
-#define MAX_COMPLETIONS 5  // Number of completions to return
 
-// Trie Node structure
+// Trie Node Structure
 typedef struct TrieNode {
-    struct TrieNode* children[ALPHABET_SIZE];  // Child nodes
-    int frequency;  // Frequency of the word ending at this node
-    int isEndOfWord;  // True if the node is the end of a word
+    struct TrieNode* children[ALPHABET_SIZE];  // Array for 26 letters (a-z)
+    int frequency;                  // Frequency of the word
+    int isEndOfWord;                // Flag if it's the end of a word
 } TrieNode;
 
-// Min-Heap node structure for Priority Queue
+// Min-Heap Structure for storing word completions
 typedef struct HeapNode {
-    char* word;  // Word
-    int frequency;  // Frequency of the word
+    char word[100];  // Word stored in the heap
+    int frequency;   // Frequency of the word
 } HeapNode;
 
-// Min-Heap structure
 typedef struct MinHeap {
-    HeapNode** array;
-    int size;
-    int capacity;
+    HeapNode** array;  // Array of HeapNodes
+    int size;           // Current size of heap
+    int capacity;       // Capacity of heap
 } MinHeap;
 
-// Function prototypes
+// Function Prototypes
 TrieNode* createTrieNode();
-void insert(TrieNode* root, const char* word, int frequency);
-TrieNode* search(TrieNode* root, const char* prefix);
+HeapNode* createHeapNode(const char* word, int frequency);
 MinHeap* createMinHeap(int capacity);
+void swapHeapNodes(HeapNode** a, HeapNode** b);
+void minHeapify(MinHeap* heap, int index);
 void insertMinHeap(MinHeap* heap, HeapNode* node);
-HeapNode* extractMin(MinHeap* heap);
-void getTopCompletions(TrieNode* root, const char* prefix, MinHeap* heap);
-void freeTrie(TrieNode* root);
-void freeMinHeap(MinHeap* heap);
-void printTopCompletions(MinHeap* heap);
+TrieNode* search(TrieNode* root, const char* prefix);
+void collectCompletions(TrieNode* node, char* prefix, MinHeap* heap);
+void insert(TrieNode* root, const char* word, int frequency);
 void loadDictionary(TrieNode* root, const char* filename);
 
+// Main function for testing
 int main() {
     TrieNode* root = createTrieNode();
-
-    // Load words from dictionary file into the Trie
-    loadDictionary(root, "words.txt");  // Full path
+    loadDictionary(root, "words.txt"); // Load words from a file
 
     char prefix[100];
     printf("Enter prefix for autocomplete: ");
     scanf("%s", prefix);
 
-    MinHeap* heap = createMinHeap(MAX_COMPLETIONS);
-    getTopCompletions(root, prefix, heap);
+    TrieNode* node = search(root, prefix);
+    if (node == nullptr) {
+        printf("No words found with this prefix.\n");
+    } else {
+        MinHeap* heap = createMinHeap(10); // Store top 10 completions
+        collectCompletions(node, prefix, heap);
 
-    // Print top completions
-    printTopCompletions(heap);
-
-    // Clean up
-    freeTrie(root);
-    freeMinHeap(heap);
+        // Output top completions
+        printf("Top completions:\n");
+        for (int i = 0; i < heap->size; i++) {
+            printf("%s \n", heap->array[i]->word);
+        }
+    }
 
     return 0;
 }
 
-// Trie Node creation
+
+
+// Function to create a new Trie Node
 TrieNode* createTrieNode() {
     TrieNode* node = (TrieNode*)malloc(sizeof(TrieNode));
+    for (int i = 0; i < 26; i++) {
+        node->children[i] = nullptr;
+    }
     node->frequency = 0;
     node->isEndOfWord = 0;
-    for (int i = 0; i < ALPHABET_SIZE; i++) {
-        node->children[i] = NULL;
-    }
     return node;
 }
 
-// Insert a word into the Trie
+// Function to create a new MinHeap Node
+HeapNode* createHeapNode(const char* word, int frequency) {
+    HeapNode* node = (HeapNode*)malloc(sizeof(HeapNode));
+    strcpy(node->word, word);
+    node->frequency = frequency;
+    return node;
+}
+
+// Function to create a new MinHeap
+MinHeap* createMinHeap(int capacity) {
+    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
+    heap->capacity = capacity;
+    heap->size = 0;
+    heap->array = (HeapNode**)malloc(capacity * sizeof(HeapNode*));
+    return heap;
+}
+
+// Function to swap two heap nodes
+void swapHeapNodes(HeapNode** a, HeapNode** b) {
+    HeapNode* temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Min-Heapify function to maintain the min-heap property
+void minHeapify(MinHeap* heap, int index) {
+    int smallest = index;
+    int left = 2 * index + 1;
+    int right = 2 * index + 2;
+
+    if (left < heap->size && heap->array[left]->frequency < heap->array[smallest]->frequency) {
+        smallest = left;
+    }
+    if (right < heap->size && heap->array[right]->frequency < heap->array[smallest]->frequency) {
+        smallest = right;
+    }
+
+    if (smallest != index) {
+        swapHeapNodes(&heap->array[index], &heap->array[smallest]);
+        minHeapify(heap, smallest);
+    }
+}
+
+// Insert a node into the MinHeap
+void insertMinHeap(MinHeap* heap, HeapNode* node) {
+    if (heap->size < heap->capacity) {
+        heap->size++;
+        int index = heap->size - 1;
+        heap->array[index] = node;
+
+        while (index > 0 && heap->array[(index - 1) / 2]->frequency > heap->array[index]->frequency) {
+            swapHeapNodes(&heap->array[(index - 1) / 2], &heap->array[index]);
+            index = (index - 1) / 2;
+        }
+    } else if (heap->array[0]->frequency < node->frequency) {
+        // Replace the root with the new node if the new node has higher frequency
+        free(heap->array[0]);  // Free the old root
+        heap->array[0] = node;
+        minHeapify(heap, 0);    // Reheapify
+    }
+}
+
+// Function to search for a prefix in the Trie
+TrieNode* search(TrieNode* root, const char* prefix) {
+    TrieNode* node = root;
+    char lower_prefix[100];
+
+    // Convert the prefix to lowercase
+    for (int i = 0; prefix[i]; i++) {
+        lower_prefix[i] = tolower(prefix[i]);
+    }
+
+    // Traverse the Trie based on the prefix
+    for (int i = 0; lower_prefix[i] != '\0'; i++) {
+        int index = lower_prefix[i] - 'a';  // Adjust indexing for lowercase letters
+        if (node->children[index] == nullptr) {
+            return nullptr; // If the prefix doesn't match, return NULL
+        }
+        node = node->children[index];
+    }
+
+    return node;
+}
+
+// Function to collect completions from a node in the Trie
+void collectCompletions(TrieNode* node, char* prefix, MinHeap* heap) {
+    if (node == nullptr || heap->size == heap->capacity) {
+        return;
+    }
+
+    // If the node marks the end of a word, add it to the heap
+    if (node->isEndOfWord) {
+        HeapNode* newNode = createHeapNode(prefix, node->frequency);
+        insertMinHeap(heap, newNode);
+    }
+
+    // Traverse the children of the node
+    for (int i = 0; i < 26; i++) {
+        if (node->children[i] != nullptr) {
+            char newPrefix[100];
+            strcpy(newPrefix, prefix);
+            newPrefix[strlen(newPrefix)] = 'a' + i;  // Add the letter to the prefix
+            newPrefix[strlen(newPrefix) + 1] = '\0';  // Null-terminate the string
+            collectCompletions(node->children[i], newPrefix, heap);
+        }
+    }
+}
+
+// Function to insert a word into the Trie
 void insert(TrieNode* root, const char* word, int frequency) {
     TrieNode* node = root;
-    for (int i = 0; i < strlen(word); i++) {
-        int index = word[i] - 'a';
-        if (node->children[index] == NULL) {
+    char lower_word[100];
+
+    // Convert word to lowercase
+    for (int i = 0; word[i]; i++) {
+        lower_word[i] = tolower(word[i]);
+    }
+
+    // Traverse the Trie for the word
+    for (int i = 0; lower_word[i] != '\0'; i++) {
+        int index = lower_word[i] - 'a';
+        if (node->children[index] == nullptr) {
             node->children[index] = createTrieNode();
         }
         node = node->children[index];
     }
+
+    // Mark the end of the word and set the frequency
     node->isEndOfWord = 1;
-    node->frequency += frequency;  // Increment frequency for duplicate words
-}
-
-// Search for a prefix in the Trie
-TrieNode* search(TrieNode* root, const char* prefix) {
-    TrieNode* node = root;
-    for (int i = 0; i < strlen(prefix); i++) {
-        int index = prefix[i] - 'a';
-        if (node->children[index] == NULL) {
-            return NULL;
-        }
-        node = node->children[index];
-    }
-    return node;
-}
-
-// Min-Heap creation
-MinHeap* createMinHeap(int capacity) {
-    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
-    heap->size = 0;
-    heap->capacity = capacity;
-    heap->array = (HeapNode**)malloc(sizeof(HeapNode*) * capacity);
-    return heap;
-}
-
-// Insert a word into the Min-Heap
-void insertMinHeap(MinHeap* heap, HeapNode* node) {
-    if (heap->size < heap->capacity) {
-        heap->array[heap->size++] = node;
-        int i = heap->size - 1;
-        while (i > 0 && heap->array[(i - 1) / 2]->frequency > heap->array[i]->frequency) {
-            HeapNode* temp = heap->array[i];
-            heap->array[i] = heap->array[(i - 1) / 2];
-            heap->array[(i - 1) / 2] = temp;
-            i = (i - 1) / 2;
-        }
-    } else if (node->frequency > heap->array[0]->frequency) {
-        heap->array[0] = node;
-        int i = 0;
-        while (2 * i + 1 < heap->size) {
-            int left = 2 * i + 1;
-            int right = 2 * i + 2;
-            int smallest = i;
-
-            if (left < heap->size && heap->array[left]->frequency < heap->array[smallest]->frequency) {
-                smallest = left;
-            }
-            if (right < heap->size && heap->array[right]->frequency < heap->array[smallest]->frequency) {
-                smallest = right;
-            }
-
-            if (smallest != i) {
-                HeapNode* temp = heap->array[i];
-                heap->array[i] = heap->array[smallest];
-                heap->array[smallest] = temp;
-                i = smallest;
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-// Extract the min element from Min-Heap
-HeapNode* extractMin(MinHeap* heap) {
-    if (heap->size == 0) {
-        return NULL;
-    }
-    HeapNode* root = heap->array[0];
-    heap->array[0] = heap->array[--heap->size];
-    // Heapify the array
-    for (int i = (heap->size - 1) / 2; i >= 0; i--) {
-        int left = 2 * i + 1;
-        int right = 2 * i + 2;
-        int smallest = i;
-        if (left < heap->size && heap->array[left]->frequency < heap->array[smallest]->frequency) {
-            smallest = left;
-        }
-        if (right < heap->size && heap->array[right]->frequency < heap->array[smallest]->frequency) {
-            smallest = right;
-        }
-        if (smallest != i) {
-            HeapNode* temp = heap->array[i];
-            heap->array[i] = heap->array[smallest];
-            heap->array[smallest] = temp;
-        }
-    }
-    return root;
-}
-
-// Find top completions for a prefix using Trie and Min-Heap
-void getTopCompletions(TrieNode* root, const char* prefix, MinHeap* heap) {
-    TrieNode* node = search(root, prefix);
-    if (node == NULL) return;
-
-    // Traverse the Trie and insert words into the Min-Heap
-    // Function to recursively find completions
-    for (int i = 0; i < ALPHABET_SIZE; i++) {
-        if (node->children[i] != NULL) {
-            char childPrefix[100];
-            snprintf(childPrefix, sizeof(childPrefix), "%s%c", prefix, 'a' + i);
-            if (node->children[i]->isEndOfWord) {
-                HeapNode* newNode = (HeapNode*)malloc(sizeof(HeapNode));
-                newNode->word = strdup(childPrefix);
-                newNode->frequency = node->children[i]->frequency;
-                insertMinHeap(heap, newNode);
-            }
-            getTopCompletions(node->children[i], childPrefix, heap);
-        }
-    }
-}
-
-// Print the top completions
-void printTopCompletions(MinHeap* heap) {
-    printf("Top completions:\n");
-    for (int i = 0; i < heap->size; i++) {
-        printf("%s (Frequency: %d)\n", heap->array[i]->word, heap->array[i]->frequency);
-    }
-}
-
-// Free the Trie memory
-void freeTrie(TrieNode* root) {
-    if (root == NULL) return;
-    for (int i = 0; i < ALPHABET_SIZE; i++) {
-        freeTrie(root->children[i]);
-    }
-    free(root);
-}
-
-// Free the Min-Heap memory
-void freeMinHeap(MinHeap* heap) {
-    if (heap == NULL) return;
-    for (int i = 0; i < heap->size; i++) {
-        free(heap->array[i]->word);
-        free(heap->array[i]);
-    }
-    free(heap->array);
-    free(heap);
+    node->frequency = frequency;
 }
 
 // Load the dictionary from a file and insert the words into the Trie
 void loadDictionary(TrieNode* root, const char* filename) {
     FILE* file = fopen(filename, "r");
-    if (file == NULL) {
+    if (file ==nullptr) {
         printf("Error opening file.\n");
         return;
     }
