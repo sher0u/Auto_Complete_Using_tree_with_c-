@@ -67,6 +67,10 @@ int main() {
 // Function to create a new Trie Node
 TrieNode* createTrieNode() {
     TrieNode* node = (TrieNode*)malloc(sizeof(TrieNode));
+    if (node == NULL) {
+        printf("Memory allocation failed for TrieNode.\n");
+        exit(1);  // Exit if memory allocation fails
+    }
     for (int i = 0; i < 26; i++) {
         node->children[i] = nullptr;
     }
@@ -74,6 +78,7 @@ TrieNode* createTrieNode() {
     node->isEndOfWord = 0;
     return node;
 }
+
 
 // Function to create a new MinHeap Node
 HeapNode* createHeapNode(const char* word, int frequency) {
@@ -144,7 +149,11 @@ TrieNode* search(TrieNode* root, const char* prefix) {
 
     // Convert the prefix to lowercase
     for (int i = 0; prefix[i]; i++) {
-        lower_prefix[i] = tolower(prefix[i]);
+        if (isalpha(prefix[i])) {
+            lower_prefix[i] = tolower(prefix[i]);
+        } else {
+            lower_prefix[i] = prefix[i];  // Non-alphabetic characters stay as they are
+        }
     }
 
     // Traverse the Trie based on the prefix
@@ -217,7 +226,7 @@ void loadDictionary(TrieNode* root, const char* filename) {
 
     char word[100];
     while (fscanf(file, "%s", word) != EOF) {
-        insert(root, word, 1);  // Assuming frequency is 1 for now
+        insert(root, word, 1);
     }
 
     fclose(file);
