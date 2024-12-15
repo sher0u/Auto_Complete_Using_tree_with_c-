@@ -1,3 +1,5 @@
+// andrey check the structure if everthing is working well add a comment 
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
