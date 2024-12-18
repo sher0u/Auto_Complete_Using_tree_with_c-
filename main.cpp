@@ -1,5 +1,3 @@
-// andrey check the structure if everthing is working well add a comment 
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -42,6 +40,8 @@ void loadDictionary(TrieNode* root, const char* filename);
 int main() {
     TrieNode* root = createTrieNode();
     loadDictionary(root, "words.txt"); // Load words from a file
+
+    printf("\n=== Autocomplete System ===\n");
 
     char prefix[100];
     printf("Enter prefix for autocomplete: ");
@@ -186,9 +186,10 @@ void collectCompletions(TrieNode* node, char* prefix, MinHeap* heap) {
     for (int i = 0; i < 26; i++) {
         if (node->children[i] != nullptr) {
             char newPrefix[100];
+            size_t len = strlen(prefix);
             strcpy(newPrefix, prefix);
-            newPrefix[strlen(newPrefix)] = 'a' + i;  // Add the letter to the prefix
-            newPrefix[strlen(newPrefix) + 1] = '\0';  // Null-terminate the string
+            newPrefix[len] = 'a' + i;
+            newPrefix[len + 1] = '\0';
             collectCompletions(node->children[i], newPrefix, heap);
         }
     }
